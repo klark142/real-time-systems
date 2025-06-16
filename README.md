@@ -3,7 +3,7 @@
 ## Informacje o projekcie
 
 **Nazwa systemu:** Adaptacyjny tempomat (ACC)  
-**Autor:** *Jakub Karoń*
+**Autor:** *Jakub Karoń*  
 **E-mail kontaktowy:** *jakubkaron@student.agh.edu.pl*
 
 ---
@@ -115,7 +115,7 @@ Zsumowane masy według właściwości `SEI::GrossWeight`:
 
 Poniżej graficzna reprezentacja połączeń komponentów (CPU, magistrala, sensory, wątki, aktuatory):
 
-![Schemat systemu ACC](f608c5e5-aba3-4ccd-863b-f7f573932cc1.png)
+![Schemat systemu ACC](diagram.png)
 
 ---
 
