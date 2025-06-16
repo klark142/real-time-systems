@@ -1,52 +1,136 @@
+# Adaptacyjny Tempomat – model AADL
 
-# Adaptive Cruise Control (ACC) – Model AADL
+## Informacje o projekcie
 
-## 1. Dane studenta
-### Jakub Karoń
-### jakubkaron@student.agh.edu.pl
-
-
-## 2. Opis ogólny  
-Adaptive Cruise Control (ACC) to zaawansowany system wspomagający kierowcę, który utrzymuje zadaną prędkość pojazdu oraz – w trybie adaptacyjnym – bezpieczny odstęp od poprzedzającego samochodu. Nasz model w AADL obejmuje trzy główne elementy:
-1. **Menedżer trybów (ModeManager)**  
-   – odpowiada za przełączanie między trybami: OFF, HOLD (klasyczny tempomat), ADAPTIVE (ACC) i STOP (zerowa prędkość).  
-2. **Wątek ACC (ACCThread)**  
-   – monitoruje dystans do poprzedzającego pojazdu i na tej podstawie modyfikuje prędkość zadawaną regulatorowi.  
-3. **Regulator prędkości (PIDThread)**  
-   – w pętli co 50 ms odczytuje prędkość aktualną, oblicza błąd względem prędkości zadanej (z klasycznego tempomatu lub ACC) i wysyła komendę do przepustnicy.
-
-Całość zestawiona jest w systemie `AdaptiveCCSystem`, który łączy sensory (prędkości i dystansu), jednostkę sterującą i aktuatorem przepustnicy.
+**Nazwa systemu:** Adaptacyjny tempomat (ACC)  
+**Autor:** *Jakub Karoń*
+**E-mail kontaktowy:** *jakubkaron@student.agh.edu.pl*
 
 ---
 
-## 3. Wymagania funkcjonalne  
-1. **Monitorowanie prędkości i dystansu**  
-   - Odczyt prędkości z czujnika co 50 ms.  
-   - Odczyt odległości do poprzedzającego pojazdu co 50 ms.  
-2. **Tryby pracy**  
-   - **OFF** – system wyłączony.  
-   - **HOLD** – klasyczny tempomat utrzymujący zadaną prędkość.  
-   - **ADAPTIVE** – ACC dostosowujący prędkość, by utrzymać bezpieczny odstęp (_d_target_).  
-   - **STOP** – zatrzymanie pojazdu, gdy dystans < minimalnego progu.  
-3. **Przejścia między trybami**  
-   - SET → HOLD → (jeśli pojazd w zasięgu) → ADAPTIVE.  
-   - Hamulec lub OFF → powrót do OFF.  
-   - W ADAPTIVE, gdy dystans < próg, → STOP; gdy dystans ≥ próg, → ADAPTIVE.  
-4. **Algorytm regulacji**  
-   - PID w pętli zamkniętej:  
-     1. odczyt prędkości,  
-     2. obliczenie błędu względem docelowej prędkości,  
-     3. generacja sygnału do przepustnicy.  
-   - W trybie ADAPTIVE: regulator przyjmuje jako prędkość zadaną wynik z ACCThread.
+## Co robi system?
+
+Zaprojektowany system to adaptacyjny tempomat, który automatycznie zarządza prędkością pojazdu. Działa w kilku trybach i dynamicznie reaguje na sytuację drogową, bazując na danych z czujników:
+
+- tryb **Hold** utrzymuje zadaną prędkość,
+- tryb **Adaptive** dostosowuje ją do dystansu do poprzedzającego pojazdu,
+- **Stop** wymusza hamowanie, jeśli to konieczne,
+- a **Off** dezaktywuje funkcje.
+
+Użytkownik korzysta z dwóch przycisków: **SET** i **CANCEL**, a całość reaguje też na sygnał z pedału hamulca.
 
 ---
 
-## 4. Wymagania niefunkcjonalne  
-1. **Czas rzeczywisty**  
-   - **PIDThread**: okres 50 ms, WCET maks. 2 ms, deadline = 50 ms, jitter ≤ ±1 ms.  
-   - **ACCThread**: okres 50 ms, WCET maks. 2 ms, deadline = 50 ms.  
-   - **ModeManager**: okres 10 ms, WCET maks. 1 ms, deadline = 10 ms.  
-2. **Bezpieczeństwo i niezawodność**  
-   - Natychmiastowe przejście do OFF po sygnale hamowania.  
-   - Tryb STOP w sytuacjach krytycznych (dystans < próg).  
-   - Obsługa utraty pomiaru (timeouty, powrót do HOLD lub OFF).  
+## Budowa modelu – warstwy systemu
+
+### 1. Warstwa sprzętowa
+
+Układ oparty jest na pojedynczym CPU, do którego przez magistralę podłączone są sensory i aktuatory.
+
+**Elementy fizyczne:**
+
+| Nazwa                 | Typ urządzenia  | Funkcja                                | Masa [kg] |
+|-----------------------|------------------|-----------------------------------------|-----------|
+| `Central_CPU`         | procesor         | kontrola wątków                         | 0.05      |
+| `Control_Bus`         | magistrala       | transmisja danych                       | 0.10      |
+| `Speed_Sensor`        | sensor           | prędkość pojazdu (km/h*100)            | 0.02      |
+| `Distance_Sensor`     | sensor           | dystans do innego pojazdu (m*100)      | 0.03      |
+| `Brake_Signal_Sensor` | sensor           | sygnał z hamulca (ON/OFF)              | 0.01      |
+| `Throttle_Actuator`   | aktuator         | sterowanie przepustnicą (0–100%)       | 0.15      |
+| `Brake_Actuator`      | aktuator         | włączenie hamulca                      | 0.20      |
+
+---
+
+### 2. Warstwa funkcjonalna (oprogramowanie)
+
+System logiczny oparty jest na trzech głównych procesach:
+
+#### **ModeManager**
+Zajmuje się wyborem trybu na podstawie sygnałów wejściowych (przyciski, dystans, hamulec). Steruje trybem pracy i może wymusić hamowanie.
+
+#### **ACCController**
+Działa tylko w trybie `Adaptive`. Oblicza bezpieczną prędkość na podstawie dystansu do pojazdu z przodu.
+
+#### **PIDController**
+Reguluje sygnał do przepustnicy, porównując aktualną prędkość z wartością zadaną.
+
+**Wątki:**
+
+| Nazwa         | Typ      | Częstotliwość | Priorytet | Opis działania |
+|---------------|----------|---------------|-----------|----------------|
+| `ModeManager_Thread` | Periodic | 10 ms        | 10        | przełączanie trybów |
+| `ACC_Thread`         | Periodic | 50 ms        | 8         | obliczanie adaptacyjnej prędkości |
+| `PID_Thread`         | Periodic | 50 ms        | 7         | sterowanie przepustnicą |
+
+---
+
+### 3. Integracja systemowa
+
+Główna jednostka systemowa to `AdaptiveCCSystem`. Zawiera wszystkie urządzenia, CPU, magistralę i procesy.
+
+**Przykładowe powiązania logiczne:**
+- `Speed_Sensor` dostarcza dane zarówno do `PIDController`, jak i `ModeManager`.
+- `ModeManager` przekazuje sygnały do `ACCController` i `PIDController`.
+- `PIDController` steruje `Throttle_Actuator`, a `ModeManager` – `Brake_Actuator`.
+
+**Wiązania sprzętowe:**
+- Wszystkie komponenty są powiązane z jedną magistralą `mag` oraz procesorem `cpu`.
+
+**Połączenia międzyprocesowe są przypisane do magistrali**, co było konieczne do poprawnego przejścia analiz AADL.
+
+---
+
+## Analizy i testy
+
+System został poddany kilku analizom narzędziowym w OSATE. Oto wyniki:
+
+| Rodzaj analizy                | Cel testu                                            | Status            |
+|------------------------------|------------------------------------------------------|-------------------|
+| Wiązania (`BindingConstraints`) | Czy wszystkie komponenty mają przypisany CPU i magistralę | ✔ brak błędów     |
+| Masa (`WeightAnalysis`)         | Czy komponenty mają zdefiniowaną masę              | ✔ masa: **0.560 kg** |
+| Magistrala (`BusLoadAnalysis`) | Czy przepustowość nie jest przekroczona            | ✔ obciążenie: **0.02 KB/s** |
+| Połączenia (`ConnectionBindingConsistency`) | Czy połączenia są przypisane do fizycznej magistrali | ✔ wszystkie poprawnie |
+| Porty (`PortConnectionConsistency`) | Czy porty są dobrze połączone i zgodne typami     | ✔ bez błędów       |
+
+---
+
+## Całkowita masa systemu
+
+Zsumowane masy według właściwości `SEI::GrossWeight`:
+
+| Komponent         | Masa [kg] |
+|-------------------|-----------|
+| `mag`             | 0.100     |
+| `speed_sens`      | 0.020     |
+| `dist_sens`       | 0.030     |
+| `brake_sens`      | 0.010     |
+| `throttle_act`    | 0.150     |
+| `brake_act`       | 0.200     |
+| `cpu`             | 0.050     |
+| **Suma**          | **0.560** |
+
+---
+
+## Schemat systemu
+
+Poniżej graficzna reprezentacja połączeń komponentów (CPU, magistrala, sensory, wątki, aktuatory):
+
+![Schemat systemu ACC](f608c5e5-aba3-4ccd-863b-f7f573932cc1.png)
+
+---
+
+## Możliwe rozszerzenia systemu
+
+Projekt można rozbudować o dodatkowe funkcjonalności:
+
+- Rozpoznawanie znaków drogowych (np. ograniczenia prędkości)
+- Integracja z nawigacją lub mapą HD
+- Uczenie maszynowe do predykcji stylu jazdy poprzedzających pojazdów
+- Obsługa tempomatu zdalnie (np. sterowanie przez aplikację)
+
+---
+
+## Wnioski końcowe
+
+System adaptacyjnego tempomatu został pomyślnie odwzorowany w AADL i przeszedł wszystkie kluczowe analizy. Poprawne odwzorowanie połączeń, wiązań i priorytetów sprawia, że jest to dobra baza do dalszych eksperymentów lub wdrożeń.
+
