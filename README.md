@@ -115,7 +115,7 @@ Zsumowane masy według właściwości `SEI::GrossWeight`:
 
 Poniżej graficzna reprezentacja połączeń komponentów (CPU, magistrala, sensory, wątki, aktuatory):
 
-![Schemat systemu ACC](diegram_2.png)
+![Schemat systemu ACC](diagram.png)
 
 ---
 
